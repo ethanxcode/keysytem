@@ -19,11 +19,6 @@ local _req = (syn and syn.request)
 
 if restorefunction and _req then pcall(restorefunction, _req) end
 
-local function isHooked(fn)
-    if not fn then return true end
-    return false
-end
-
 local function notif(title, text, dur)
     pcall(GUI.SetCore, GUI, "SendNotification", {
         Title = title, Text = text, Duration = dur or 5
@@ -53,7 +48,7 @@ local function callAPI(key)
         executor  = (identifyexecutor and identifyexecutor()) or "Unknown",
         gameId    = game.GameId,
         placeId   = game.PlaceId,
-        timestamp = os.time(),
+        timestamp = os.time(), -- FIX: os.time() bukan tick()
     })
 
     local ok, resp = pcall(_req, {
@@ -61,7 +56,7 @@ local function callAPI(key)
         Method  = "POST",
         Headers = {
             ["Content-Type"] = "application/json",
-            ["User-Agent"]   = "StreeHub/2.4",
+            ["User-Agent"]   = "StreeHub/2.5",
         },
         Body = body,
     })
@@ -73,6 +68,7 @@ local function callAPI(key)
     return ok2 and data or nil
 end
 
+-- FIX: math.random(1, #c) bukan math.random(#c) yang bisa return 0
 local function fakeKey()
     local c = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     local function seg()
@@ -109,8 +105,6 @@ if not _req then
     return
 end
 
-if isHooked(_req) then kick("Security check failed.") return end
-
 notif("StreeHub", "Memverifikasi key...", 4)
 
 local checks = {{ t="REAL", k=key }, { t="FAKE", k=fakeKey() }}
@@ -128,6 +122,7 @@ for _, c in ipairs(checks) do
 end
 
 if busted then kick("Security check failed.") return end
+
 if not result then
     notif("StreeHub", "Gagal konek ke server!\nCek koneksi / coba lagi.", 7)
     task.wait(2)
@@ -141,29 +136,25 @@ if s == "premium" then
     notif("StreeHub", "✅ Verified! Halo, " .. LP.Name, 5)
     _G.streehub = { ok = true, premium = true }
 elseif s == "kick" then
+    -- FIX: semua reason dihandle + pesan jelas
+    local msgs = {
+        NOT_REDEEMED       = "Key belum di-redeem!\nRedeem dulu via Discord.",
+        HWID_LIMIT         = "Key terikat device lain.\nKlik 'Reset HWID' di Discord.",
+        RATE_LIMITED       = "Terlalu cepat. Coba lagi 1 menit.",
+        NOT_PREMIUM        = "Key kamu bukan premium.",
+        KEY_NOT_FOUND      = "Key tidak ditemukan di database.",
+        SERVER_ERROR       = "Server error. Coba lagi beberapa saat.",
+        INVALID_HWID       = "HWID tidak valid. Restart executor.",
+        INVALID_KEY_FORMAT = "Format key tidak valid.",
+        BAD_REQUEST        = "Request tidak valid.",
+        STALE_REQUEST      = "Request expired. Coba execute lagi.",
+    }
+    local msg = msgs[r] or ("Ditolak: " .. tostring(r))
     if r == "NOT_REDEEMED" then
-        notif("StreeHub", "Key belum di-redeem!\nRedeem dulu via Discord.", 7)
+        notif("StreeHub", msg, 8)
         task.wait(2)
-        kick("Belum redeem key.\nKlik 'Redeem Key' di panel Discord.")
-    elseif r == "HWID_LIMIT" then
-        kick("Key terikat device lain.\nKlik 'Reset HWID' di Discord.")
-    elseif r == "RATE_LIMITED" then
-        kick("Terlalu cepat. Coba lagi 1 menit.")
-    elseif r == "NOT_PREMIUM" then
-        kick("Key kamu bukan premium.")
-    elseif r == "KEY_NOT_FOUND" then
-        kick("Key tidak ditemukan di database.")
-    elseif r == "STALE_REQUEST" then
-        kick("Request expired. Coba execute lagi.")
-    elseif r == "SERVER_ERROR" then
-        kick("Server error. Coba lagi beberapa saat.")
-    elseif r == "INVALID_HWID" then
-        kick("HWID tidak valid. Coba restart executor.")
-    else
-        notif("StreeHub", "Ditolak: " .. tostring(r), 6)
-        task.wait(2)
-        kick("Ditolak: " .. tostring(r))
     end
+    kick(msg)
     return
 else
     kick("Response tidak dikenal: " .. tostring(s))
@@ -224,13 +215,13 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.ResetOnSpawn   = false
 ScreenGui.Parent         = CoreGui
 
-local Frame = Instance.new("Frame")
-Frame.Size                 = UDim2.new(0, 320, 0, 160)
-Frame.Position             = UDim2.new(0.5, -160, 0.5, -80)
-Frame.BackgroundColor3     = Color3.fromRGB(0, 0, 0)
+-- FIX: Frame.Parent diset setelah dibuat bukan terpisah
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size                   = UDim2.new(0, 320, 0, 160)
+Frame.Position               = UDim2.new(0.5, -160, 0.5, -80)
+Frame.BackgroundColor3       = Color3.fromRGB(0, 0, 0)
 Frame.BackgroundTransparency = 0.3
-Frame.BorderSizePixel      = 0
-Frame.Parent               = ScreenGui
+Frame.BorderSizePixel        = 0
 
 local UICorner = Instance.new("UICorner", Frame)
 UICorner.CornerRadius = UDim.new(0, 20)
@@ -296,7 +287,7 @@ if gameData then
     loadstring(game:HttpGet(gameData.premium))()
 else
     StarterGui:SetCore("SendNotification", {
-        Title = "STREE HUB", Text = "Game not supported! PlaceId: " .. placeId,
+        Title = "STREE HUB", Text = "Game not supported!\nPlaceId: " .. placeId,
         Icon = streeLogo, Duration = 5
     })
     LP:Kick("❌ Game not supported! PlaceId: " .. placeId)
